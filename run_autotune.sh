@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Tool to run OpenAPS oref0 Autotune on Nightscout data iteratively
 # for multiple history ranges and output the result.
@@ -15,15 +15,20 @@
 # THE SOFTWARE.
 #
 #
+set -e
 
 NIGHTSCOUT="$1"
 OUTPUT="$PWD/runfiles"
+
+test -d "$OUTPUT" || mkdir "$OUTPUT"
+
+PATH="/node_modules/oref0/bin/:/usr/local/bin:$PATH"
 
 for DAYS in 1 8 15; do
    START=`date -d "-$DAYS days" +"%Y-%m-%d"`
    END=`date -d "-1 days" +"%Y-%m-%d"`
 
-   echo "----- $START to $END ------"
+   echo "-- $START - $END --"
 
    BASE="$OUTPUT/$DAYS"
    test -d "$BASE" && rm -rf "$BASE"
@@ -34,11 +39,15 @@ for DAYS in 1 8 15; do
    node nightscout_to_openaps.js "$NIGHTSCOUT" > "$DST/profile.json"
    cp "$DST/profile.json" "$DST/pumpprofile.json"
    cp "$DST/profile.json" "$DST/autotune.json"
-   for i in `seq 4`; do
-	echo "----- Iteration $i -----"
-	oref0-autotune --dir="$BASE" --ns-host=$NIGHTSCOUT --start-date=$START --end-date=$END >/dev/null
-	cp "$TARGET/profile.json" "$DST/pumpprofile.json"
-	cat "$TARGET/autotune_recommendations.log"
+   for i in `seq 1`; do
+	echo "-------- Iteration $i --------"
+	if oref0-autotune --dir="$BASE" --ns-host=$NIGHTSCOUT --start-date=$START --end-date=$END > "$TARGET/$i.log" 2>&1; then
+		cp "$TARGET/profile.json" "$DST/pumpprofile.json"
+		cat "$TARGET/autotune_recommendations.log"
+	else
+		cat "$TARGET/$i.log"
+		exit 3
+	fi
    done
    echo
    echo
