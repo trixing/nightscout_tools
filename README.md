@@ -12,4 +12,14 @@ Customization is available in the code.
 
 To use:
 
-./run_autotune.sh https://example.nightscout.site
+$ ./run_autotune.sh https://example.nightscout.site
+
+## Docker
+
+$ docker build -t trixing/autotune .
+
+You may want to customize a few environment variables, the most important
+one being the URL.  Their is a few more mailing related things in the
+Dockerfile if you want to see the results not only in the docker logs.
+
+$ docker run -e URL=https://example.com trixing/autotune
