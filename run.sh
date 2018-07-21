@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # Docker container script to be invoked by cron.
 #
@@ -15,8 +15,13 @@
 #
 #
 
+if [ "x" == "x$URL" ]; then
+  URL="$1"
+fi
 
 OUTPUT="$(cd /app/ && ./run_autotune.sh $URL)"
+
+env
 
 echo "$OUTPUT"
 
