@@ -1,19 +1,26 @@
+# docker build -t trixing/autotune .
+# docker tag trixing/autotune:latest registry.trixing.net/trixing/autotune:live
 FROM node:slim
 
 MAINTAINER Jan Dittmer <jdi@l4x.org>
 
-RUN npm install oref0
+RUN apt-get update && apt-get -y install jq cron git bc locales && apt-get clean
+RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 
-RUN apt-get update && apt-get -y install jq cron
+RUN npm install trixing/oref0\#v0.6.2-trixing
 
-RUN for ext in sh py js; do for f in  /node_modules/oref0/bin/*.$ext; do ln -s $f /usr/local/bin/$(basename "$f" .$ext); done; done
+RUN for ext in sh py js; do for f in  /node_modules/oref0/bin/*.$ext; do ln -s $f /usr/local/bin/$(basename "$f" .$ext); ln -s $f /usr/local/bin/$(basename "$f"); done; done
+
+ENV TZ=Europe/Berlin
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN mkdir /app
 
 ENV URL=https://example.night.scout
-ENV MAILGUN_APIKEY=7a0c3ca9709463d8737eaae438ed574b-8889127d-31644a08
-ENV MAILGUN_DOMAIN=sys.trixing.net
-ENV TO=jdi@l4x.org
+ENV MAILGUN_APIKEY=mailgun-api-key
+ENV MAILGUN_DOMAIN=example.com
+ENV TO=mail@example.com
+ENV CRON="0 5 * * *"
 
 COPY *.js *.sh /app/
 
