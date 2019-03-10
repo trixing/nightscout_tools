@@ -1,1 +1,3 @@
 runfiles/
+*.pyc
+calendar_import_example.sh
