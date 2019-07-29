@@ -37,7 +37,7 @@ function convertProfile(profile)
      var p = profile.store[profile.defaultProfile];
     var autotuneProfile =
     {
-      "min_5m_carbimpact": 3,
+      "min_5m_carbimpact": 8.0,
       "dia": Number(p.dia),
       "basalprofile": p.basal.map(convertBasal),
       "isfProfile": {

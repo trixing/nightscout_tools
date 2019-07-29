@@ -41,7 +41,7 @@ for DAYS in 1 8 15; do
    cp "$DST/profile.json" "$DST/autotune.json"
    for i in `seq 1`; do
 	echo "-------- Iteration $i --------"
-	if oref0-autotune --dir="$BASE" --ns-host="$NIGHTSCOUT" --start-date="$START" --end-date="$END" > "$TARGET/$i.log" 2>&1; then
+	if oref0-autotune --dir="$BASE" --ns-host="$NIGHTSCOUT" --start-date="$START" --end-date="$END" --tune-insulin-curve=true  > "$TARGET/$i.log" 2>&1; then
 		cp "$TARGET/profile.json" "$DST/pumpprofile.json"
 		cat "$TARGET/autotune_recommendations.log"
 	else
