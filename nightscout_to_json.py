@@ -424,6 +424,8 @@ class Nightscout(object):
 
     for (desc, days) in (('Week', week), ('Weekend', weekend)):
         print(desc)
+        tdd = 0
+        tdc = 0
         for part, hours in dayparts.items():
             insulin = 0
             carbs = 0
@@ -434,6 +436,9 @@ class Nightscout(object):
             insulin /= len(days)
             carbs /= len(days)
             print('  %s Insulin %d, Carbs %d' % (part, insulin, carbs))
+            tdd += insulin
+            tdc += carbs
+        print('  >Daily %.1f U, %d g' % (tdd,tdc))
 
 
 
@@ -489,4 +494,5 @@ if __name__ == '__main__':
 
   new_fn = 'new_%s_%s.json' % (startdate, enddate)
   open(new_fn, 'w').write(json.dumps(new, indent=4, sort_keys=True))
+  print('')
   print('Written', new_fn)
