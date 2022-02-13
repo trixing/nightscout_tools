@@ -62,7 +62,7 @@ class Nightscout(object):
         raise Exception(response.status_code, response.text)
     return response.json()
 
-  def convert(self, profile, entries, treatments):
+  def convert(self, profile, entries, treatments, tz):
     log = []
     ps = profile[0]['store']['Default']
     tz = pytz.timezone(ps['timezone'])
@@ -333,7 +333,7 @@ class Nightscout(object):
 
     new = {
     'size': bucket_size,
-    'tz': tz,
+    'tz': str(tz),
 
     'carb_ratios': [lookup_carbs(h) for h in range(24)],
     'isf': [lookup_isf(h) for h in range(24)],
