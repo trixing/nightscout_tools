@@ -34,7 +34,7 @@ import numpy as np
 from pprint import pprint
 
 
-TZ='Europe/Berlin' 
+TZ='Europe/Berlin'
 
 
 class Nightscout(object):
@@ -63,6 +63,7 @@ class Nightscout(object):
     return response.json()
 
   def convert(self, profile, entries, treatments):
+    log = []
     ps = profile[0]['store']['Default']
     tz = pytz.timezone(ps['timezone'])
     common = {
@@ -164,7 +165,6 @@ class Nightscout(object):
             basal_default_timeline['index'].append(glucose['index'][-2])
             basal_default_timeline['values'].append(default_basal)
             basal_default_timeline['durations'].append(ots - glucose['index'][-2])
-    print('MIN', min_dt, 'MAX', max_dt)
     min_ts = int(datetime.timestamp(min_dt))
     max_ts = int(datetime.timestamp(max_dt))
     bucket_size = 300
@@ -251,7 +251,7 @@ class Nightscout(object):
             basal_timeline['durations'][-1] = delta
 
         if len(basal_timeline['index']) and ts == basal_timeline['index'][-1]:
-            print('overwrite duplicate basal ts', ts)
+            log.append('overwrite duplicate basal ts', ts)
             basal_timeline['durations'][-1] = duration
             basal_timeline['values'][-1] = rate
         else:
@@ -295,7 +295,7 @@ class Nightscout(object):
     for ts, units in bolus:
         ots = ts
         if bolus_timeline['index'] and ts == bolus_timeline['index'][-1]:
-            print('drop duplicate bolus ts', ts)
+            log.append('drop duplicate bolus ts', ts)
             continue
         bolus_timeline['index'].append(ots)
         bolus_timeline['values'].append(units)
@@ -333,6 +333,7 @@ class Nightscout(object):
 
     new = {
     'size': bucket_size,
+    'tz': tz,
 
     'carb_ratios': [lookup_carbs(h) for h in range(24)],
     'isf': [lookup_isf(h) for h in range(24)],
@@ -348,20 +349,27 @@ class Nightscout(object):
     }
     for v in new_basal + new_prog_basal:
        if v < -0.1:
-          print(v)
-    print('total net basal', sum(new_basal))
-    print('total prog basal', sum(new_prog_basal))
-    print('total basal', sum(new_prog_basal) + sum(new_basal), min(new_basal))
-    print('total bolus', sum(new_bolus))
+          log.append(v)
+    log.append('total net basal: %.1f U' % sum(new_basal))
+    log.append('total prog basal: %.1f U' % sum(new_prog_basal))
+    log.append('total basal: %.1f U %.1f' % (sum(new_prog_basal) + sum(new_basal), min(new_basal)))
+    log.append('total bolus: %.1f U' % (sum(new_bolus)))
     for absorption, x in new['carbs'].items():
-        print('total carbs', absorption, sum(x))
+        log.append('total carbs %d min: %d g' % (absorption, sum(x)))
     new.update(common)
+    return ret, new, log
 
+def stats(new):
+    j = {
+      'tz': new['tz'],
+      'daily': []
+    }
     lastdate = None
     stats_hourly = {}
     carbs_hourly = {}
     stats_wd_hourly = {}
     carbs_wd_hourly = {}
+    wd_count = collections.defaultdict(int)
     for i in range(24):
         stats_hourly[i] = 0
         carbs_hourly[i] = 0
@@ -374,9 +382,15 @@ class Nightscout(object):
         dt = datetime.fromtimestamp(new['timeline'][i])
         if not lastdate or dt.date() != lastdate:
             if lastdate:
-                print('%s %s %.1f U, %3d g' % (lastdate, lastdate.strftime('%a'), stats['tdd'], stats['carbs']))
+                j['daily'].append({
+                    'date': lastdate.isoformat(),
+                    'weekday': lastdate.strftime('%a'),
+                    'insulin': round(stats['tdd'], 1),
+                    'carbs': round(stats['carbs'], 1)
+                })
             days += 1
             lastdate = dt.date()
+            wd_count[lastdate.weekday()] += 1
             stats = {
                 'tdd': 0,
                 'carbs': 0,
@@ -394,36 +408,43 @@ class Nightscout(object):
         stats['tdd'] += insulin
         stats['carbs'] += carbs
 
-    days += 1
-    print('%s %s %.1f U, %3d g' % (lastdate, lastdate.strftime('%a'), stats['tdd'], stats['carbs']))
-    print('')
-    print('')
+    j['days'] = days
+    j['weekdays'] = wd_count
+    j['daily'].append({
+                    'date': lastdate.isoformat(),
+                    'weekday': lastdate.strftime('%a'),
+                    'insulin': round(stats['tdd'], 1),
+                    'carbs': round(stats['carbs'], 1)
+    })
+    j['hourly'] = []
     for i in range(24):
         stats_hourly[i] /= days
         carbs_hourly[i] /= days
-        div = int(days / 7)
         for wd in range(7):
-            stats_wd_hourly[(wd, i)] /= div
-            carbs_wd_hourly[(wd, i)] /= div
-        print('%2d: %.2f U, %3d g' % (i, stats_hourly[i], carbs_hourly[i]))
-
-    print('')
-    print('')
+            if wd_count[wd] > 0:
+                stats_wd_hourly[(wd, i)] /= wd_count[wd]
+                carbs_wd_hourly[(wd, i)] /= wd_count[wd]
+        j['hourly'].append({
+            'hour': i,
+            'insulin': round(stats_hourly[i], 2),
+            'carbs': round(carbs_hourly[i], 1)
+        })
 
     week = (0, 1, 2, 3, 4)
     weekend = (5, 6)
 
     dayparts = dict(
     Night = (0, 1, 2, 3, 4, 5, 21, 22, 23),
-    Breakfeast = (6, 7, 8, 9),
+    Breakfast = (6, 7, 8, 9),
     Snack = (10, 11),
     Lunch = (12, 13),
-    Snack_Afternoon = (14, 15, 16, 17),
+    SnackAfternoon = (14, 15, 16, 17),
     Dinner = (18, 19, 20)
     )
 
+    j['pattern'] = {}
     for (desc, days) in (('Week', week), ('Weekend', weekend)):
-        print(desc)
+        j['pattern'][desc] = []
         tdd = 0
         tdc = 0
         for part, hours in dayparts.items():
@@ -435,31 +456,26 @@ class Nightscout(object):
                     carbs += carbs_wd_hourly[(wd, h)]
             insulin /= len(days)
             carbs /= len(days)
-            print('  %s Insulin %d, Carbs %d' % (part, insulin, carbs))
+            j['pattern'][desc].append({
+                'daytime': part,
+                'insulin': round(insulin, 1),
+                'carbs': round(carbs, 1)
+            })
             tdd += insulin
             tdc += carbs
-        print('  >Daily %.1f U, %d g' % (tdd,tdc))
+        j['pattern'][desc].append({
+                'daytime': 'Daily',
+                'insulin': round(tdd, 1),
+                'carbs': round(tdc, 1)
+        })
+
+    return j
 
 
-
-
-
-    return ret, new
-
-
-if __name__ == '__main__':
-
-  parser = argparse.ArgumentParser()
-  parser.add_argument("--url", type=str, help="nightscout url")
-  parser.add_argument("--secret", type=str, help="nightscout secret")
-  parser.add_argument("--days", type=int, help="days to retrieve since yesterday")
-  args = parser.parse_args()
-
-  days = int(args.days or 1)
-
+def run(url, start, end, days):
   today = datetime.combine(date.today(), datetime.min.time())
-  dl = Nightscout(args.url, args.secret)
-  
+  dl = Nightscout(url, None)
+
   cache_fn = 'cache_%s_%d.json' % (today.isoformat(), days)
   j = {}
   try:
@@ -469,14 +485,12 @@ if __name__ == '__main__':
 
   profile = j.get('p') or dl.download('profile')
   tz = profile[0]['store']['Default']['timezone']
-  print(tz)
   #today = today.replace(tzinfo=pytz.timezone(tz))
   today = today.astimezone(pytz.timezone(tz))
   startdate = today - timedelta(days=days)
-  enddate = startdate + timedelta(days=days) 
+  enddate = startdate + timedelta(days=days)
   startdate = startdate.astimezone(pytz.utc).isoformat()
   enddate = enddate.astimezone(pytz.utc).isoformat()
-  print(startdate, enddate)
 
   treatments = j.get('t') or dl.download(
           'treatments',
@@ -488,7 +502,19 @@ if __name__ == '__main__':
           enddate, 'count': '100000'})
   if not j:
     open(cache_fn, 'w').write(json.dumps({'p': profile, 'e': entries, 't': treatments}, indent=4, sort_keys=True))
-  ret, new = dl.convert(profile, entries, treatments)
+  return dl.convert(profile, entries, treatments, tz)
+
+
+if __name__ == '__main__':
+
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--url", type=str, help="nightscout url")
+  parser.add_argument("--secret", type=str, help="nightscout secret")
+  parser.add_argument("--days", type=int, help="days to retrieve since yesterday")
+  args = parser.parse_args()
+
+  ret, new, log = run(args.url, None, None, days=args.days)
+
   output_fn = 'ret_%s_%s.json' % (startdate, enddate)
   open(output_fn, 'w').write(json.dumps(ret, indent=4, sort_keys=True))
 
@@ -496,3 +522,6 @@ if __name__ == '__main__':
   open(new_fn, 'w').write(json.dumps(new, indent=4, sort_keys=True))
   print('')
   print('Written', new_fn)
+
+  j = stats(new)
+  print(json.dumps(j, indent=4))
