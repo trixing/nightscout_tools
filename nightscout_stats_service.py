@@ -32,5 +32,5 @@ def stats(url):
         mimetype='application/json'
     )
 
-if __name == '__main__':
+if __name__ == '__main__':
     app.run(debug=os.getenv('FLASK_ENV', 'development') == 'development', host='0.0.0.0')
