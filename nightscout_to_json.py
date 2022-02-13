@@ -208,12 +208,19 @@ class Nightscout(object):
            basal.append((ts, delta, t['duration']*60, t['rate'], lt))
         elif t['eventType'] == 'Correction Bolus':
            bolus.append((ts, t['insulin']))
+        elif t['eventType'] == 'Bolus':
+           bolus.append((ts, t['insulin']))
         elif t['eventType'] == 'Meal Bolus':
            carbs[t['absorptionTime']].append((ts, t['carbs']))
+        elif t['eventType'] == 'Carb Correction':
+           carbs[t.get('absorptionTime', 180)].append((ts, t['carbs']))
         elif t['eventType'].startswith('Debug.'):
             pass
+        elif t['eventType'].startswith('Log.'):
+            pass
         else:
-           print('ignored', t['eventType'])
+           #print('ignored', t['eventType'])
+           pass
     
     basal_timeline = {
             'type': 'basal',
@@ -309,7 +316,7 @@ class Nightscout(object):
         }
         offset = None
 
-        nc = np.zeros(nbuckets) 
+        nc = np.zeros(nbuckets)
         for ts, amount in items:
             ots = ts
             #if len(carb_timeline['index']) and ts == carb_timeline['index'][-1]:
@@ -340,14 +347,96 @@ class Nightscout(object):
     'carbs': new_carbs,
     }
     for v in new_basal + new_prog_basal:
-       if v < 0:
+       if v < -0.1:
           print(v)
     print('total net basal', sum(new_basal))
     print('total prog basal', sum(new_prog_basal))
     print('total basal', sum(new_prog_basal) + sum(new_basal), min(new_basal))
     print('total bolus', sum(new_bolus))
-    print('total carbs', sum(new_carbs))
+    for absorption, x in new['carbs'].items():
+        print('total carbs', absorption, sum(x))
     new.update(common)
+
+    lastdate = None
+    stats_hourly = {}
+    carbs_hourly = {}
+    stats_wd_hourly = {}
+    carbs_wd_hourly = {}
+    for i in range(24):
+        stats_hourly[i] = 0
+        carbs_hourly[i] = 0
+        for wd in range(7):
+            stats_wd_hourly[(wd, i)] = 0
+            carbs_wd_hourly[(wd, i)] = 0
+    stats = {}
+    days = 0
+    for i, t in enumerate(new['timeline']):
+        dt = datetime.fromtimestamp(new['timeline'][i])
+        if not lastdate or dt.date() != lastdate:
+            if lastdate:
+                print('%s %s %.1f U, %3d g' % (lastdate, lastdate.strftime('%a'), stats['tdd'], stats['carbs']))
+            days += 1
+            lastdate = dt.date()
+            stats = {
+                'tdd': 0,
+                'carbs': 0,
+            }
+
+        insulin = new['bolus'][i] + new['basal'][i] + new['prog_basal'][i]
+        carbs = 0
+        for absorption, x in new['carbs'].items():
+            carbs += x[i]
+        wd = lastdate.weekday()
+        stats_hourly[new['hours'][i]] += insulin
+        carbs_hourly[new['hours'][i]] += carbs
+        stats_wd_hourly[(wd, new['hours'][i])] += insulin
+        carbs_wd_hourly[(wd, new['hours'][i])] += carbs
+        stats['tdd'] += insulin
+        stats['carbs'] += carbs
+
+    days += 1
+    print('%s %s %.1f U, %3d g' % (lastdate, lastdate.strftime('%a'), stats['tdd'], stats['carbs']))
+    print('')
+    print('')
+    for i in range(24):
+        stats_hourly[i] /= days
+        carbs_hourly[i] /= days
+        div = int(days / 7)
+        for wd in range(7):
+            stats_wd_hourly[(wd, i)] /= div
+            carbs_wd_hourly[(wd, i)] /= div
+        print('%2d: %.2f U, %3d g' % (i, stats_hourly[i], carbs_hourly[i]))
+
+    print('')
+    print('')
+
+    week = (0, 1, 2, 3, 4)
+    weekend = (5, 6)
+
+    dayparts = dict(
+    Night = (0, 1, 2, 3, 4, 5, 21, 22, 23),
+    Breakfeast = (6, 7, 8, 9),
+    Snack = (10, 11),
+    Lunch = (12, 13),
+    Snack_Afternoon = (14, 15, 16, 17),
+    Dinner = (18, 19, 20)
+    )
+
+    for (desc, days) in (('Week', week), ('Weekend', weekend)):
+        print(desc)
+        for part, hours in dayparts.items():
+            insulin = 0
+            carbs = 0
+            for wd in days:
+                for h in hours: #range(24):
+                    insulin += stats_wd_hourly[(wd, h)]
+                    carbs += carbs_wd_hourly[(wd, h)]
+            insulin /= len(days)
+            carbs /= len(days)
+            print('  %s Insulin %d, Carbs %d' % (part, insulin, carbs))
+
+
+
 
 
     return ret, new
@@ -375,9 +464,10 @@ if __name__ == '__main__':
 
   profile = j.get('p') or dl.download('profile')
   tz = profile[0]['store']['Default']['timezone']
+  print(tz)
   #today = today.replace(tzinfo=pytz.timezone(tz))
   today = today.astimezone(pytz.timezone(tz))
-  startdate = today - timedelta(days=days + 1)
+  startdate = today - timedelta(days=days)
   enddate = startdate + timedelta(days=days) 
   startdate = startdate.astimezone(pytz.utc).isoformat()
   enddate = enddate.astimezone(pytz.utc).isoformat()
@@ -385,10 +475,12 @@ if __name__ == '__main__':
 
   treatments = j.get('t') or dl.download(
           'treatments',
-          {'find[created_at][$gte]': startdate, 'find[created_at][$lte]': enddate})
+          {'find[created_at][$gte]': startdate, 'find[created_at][$lte]':
+          enddate, 'count': '100000'})
   entries = j.get('e') or dl.download(
           'entries',
-          {'find[dateString][$gte]': startdate, 'find[dateString][$lte]:': enddate, 'count': '10000'})
+          {'find[dateString][$gte]': startdate, 'find[dateString][$lte]:':
+          enddate, 'count': '100000'})
   if not j:
     open(cache_fn, 'w').write(json.dumps({'p': profile, 'e': entries, 't': treatments}, indent=4, sort_keys=True))
   ret, new = dl.convert(profile, entries, treatments)
