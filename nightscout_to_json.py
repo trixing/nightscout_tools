@@ -475,8 +475,8 @@ def stats(new):
 def run(url, start, end, days):
   today = datetime.combine(date.today(), datetime.min.time())
   dl = Nightscout(url, None)
-
-  cache_fn = 'cache_%s_%d.json' % (today.isoformat(), days)
+  host = url.replace('https://', '').replace('http://', '')
+  cache_fn = 'cache_%s_%s_%d.json' % (host, today.isoformat(), days)
   j = {}
   try:
     j = json.loads(open(cache_fn).read())

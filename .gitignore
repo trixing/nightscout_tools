@@ -1,3 +1,6 @@
 runfiles/
 *.pyc
 calendar_import_example.sh
+cache_*
+new_*
+ret_*
