@@ -368,17 +368,23 @@ def stats(new):
     lastdate = None
     stats_hourly = {}
     carbs_hourly = {}
+    glucose_hourly = {}
     stats_wd_hourly = {}
     carbs_wd_hourly = {}
+    glucose_wd_hourly = {}
     wd_count = collections.defaultdict(int)
     for i in range(24):
         stats_hourly[i] = 0
         carbs_hourly[i] = 0
+        glucose_hourly[i] = []
         for wd in range(7):
             stats_wd_hourly[(wd, i)] = 0
             carbs_wd_hourly[(wd, i)] = 0
+            glucose_wd_hourly[(wd, i)] = []
     stats = {}
     days = 0
+    samples = 0
+
     for i, t in enumerate(new['timeline']):
         dt = datetime.fromtimestamp(new['timeline'][i])
         if not lastdate or dt.date() != lastdate:
@@ -387,27 +393,40 @@ def stats(new):
                     'date': lastdate.isoformat(),
                     'weekday': lastdate.strftime('%a'),
                     'insulin': round(stats['tdd'], 1),
-                    'carbs': round(stats['carbs'], 1)
+                    'carbs': round(stats['carbs'], 1),
+                    'glucose': round(stats['glucose'] / samples, 0),
+                    'samples': samples
                 })
             days += 1
+            samples = 0
             lastdate = dt.date()
             wd_count[lastdate.weekday()] += 1
             stats = {
                 'tdd': 0,
                 'carbs': 0,
+                'glucose': 0
             }
 
+        glucose = new['glucose'][i]
         insulin = new['bolus'][i] + new['basal'][i] + new['prog_basal'][i]
         carbs = 0
         for absorption, x in new['carbs'].items():
             carbs += x[i]
         wd = lastdate.weekday()
+
         stats_hourly[new['hours'][i]] += insulin
         carbs_hourly[new['hours'][i]] += carbs
+        glucose_hourly[new['hours'][i]].append(glucose)
+
         stats_wd_hourly[(wd, new['hours'][i])] += insulin
         carbs_wd_hourly[(wd, new['hours'][i])] += carbs
+        glucose_wd_hourly[(wd, new['hours'][i])].append(glucose)
+
         stats['tdd'] += insulin
         stats['carbs'] += carbs
+        stats['glucose'] += glucose
+        
+        samples += 1
 
     j['days'] = days
     j['weekdays'] = wd_count
@@ -415,20 +434,28 @@ def stats(new):
                     'date': lastdate.isoformat(),
                     'weekday': lastdate.strftime('%a'),
                     'insulin': round(stats['tdd'], 1),
-                    'carbs': round(stats['carbs'], 1)
+                    'carbs': round(stats['carbs'], 1),
+                    'glucose': round(stats['glucose'] / samples, 0),
+                    'samples': samples
     })
     j['hourly'] = []
     for i in range(24):
         stats_hourly[i] /= days
         carbs_hourly[i] /= days
+        glucose_avg = sum(glucose_hourly[i]) / len(glucose_hourly[i])
         for wd in range(7):
             if wd_count[wd] > 0:
                 stats_wd_hourly[(wd, i)] /= wd_count[wd]
                 carbs_wd_hourly[(wd, i)] /= wd_count[wd]
+            if glucose_wd_hourly[(wd, i)]:
+                glucose_wd_hourly[(wd, i)] = sum(glucose_wd_hourly[(wd, i)]) / len(glucose_wd_hourly[(wd, i)])
+            else:
+                glucose_wd_hourly[(wd, i)] = 0
         j['hourly'].append({
             'hour': i,
             'insulin': round(stats_hourly[i], 2),
-            'carbs': round(carbs_hourly[i], 1)
+            'carbs': round(carbs_hourly[i], 1),
+            'glucose': round(glucose_avg, 0)
         })
 
     week = (0, 1, 2, 3, 4)
@@ -448,26 +475,33 @@ def stats(new):
         j['pattern'][desc] = []
         tdd = 0
         tdc = 0
+        tdg = []
         for part, hours in dayparts.items():
             insulin = 0
             carbs = 0
+            glucose = []
             for wd in days:
                 for h in hours: #range(24):
                     insulin += stats_wd_hourly[(wd, h)]
                     carbs += carbs_wd_hourly[(wd, h)]
+                    glucose.append(glucose_wd_hourly[(wd, h)])
+
             insulin /= len(days)
             carbs /= len(days)
             j['pattern'][desc].append({
                 'daytime': part,
                 'insulin': round(insulin, 1),
-                'carbs': round(carbs, 1)
+                'carbs': round(carbs, 1),
+                'glucose': round(sum(glucose)/len(glucose))
             })
             tdd += insulin
             tdc += carbs
+            tdg.extend(glucose)
         j['pattern'][desc].append({
                 'daytime': 'Daily',
                 'insulin': round(tdd, 1),
-                'carbs': round(tdc, 1)
+                'carbs': round(tdc, 1),
+                'glucose': round(sum(tdg)/len(tdg))
         })
 
     return j
