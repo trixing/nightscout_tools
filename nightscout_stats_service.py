@@ -10,6 +10,7 @@ import re
 
 app = Flask(__name__)
 
+
 @app.route("/")
 def index():
     p = {
@@ -34,7 +35,7 @@ def stats(url):
     url = 'https://' + url
     print(url, start, end, days)
     resp = ""
-    ret, new, log = nightscout_to_json.run(url, start=start, end=end, days=days)
+    ret, new, log = nightscout_to_json.run(url, start=start, end=end, days=days, cache=False)
     data = nightscout_to_json.stats(new)
     if raw:
         data['raw'] = new
@@ -43,6 +44,7 @@ def stats(url):
         status=200,
         mimetype='application/json'
     )
+
 
 if __name__ == '__main__':
     app.run(debug=os.getenv('FLASK_ENV', 'development') == 'development', host='0.0.0.0')

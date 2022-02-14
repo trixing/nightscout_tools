@@ -473,7 +473,7 @@ def stats(new):
     return j
 
 
-def run(url, start, end, days):
+def run(url, start, end, days, cache=True):
   today = datetime.combine(date.today(), datetime.min.time())
   dl = Nightscout(url, None)
   host = url.replace('https://', '').replace('http://', '')
@@ -502,7 +502,7 @@ def run(url, start, end, days):
           'entries',
           {'find[dateString][$gte]': startdate, 'find[dateString][$lte]:':
           enddate, 'count': '10000'})
-  if not j:
+  if not j and cache:
     open(cache_fn, 'w').write(json.dumps({'p': profile, 'e': entries, 't': treatments}, indent=4, sort_keys=True))
   return dl.convert(profile, entries, treatments, tz)
 
