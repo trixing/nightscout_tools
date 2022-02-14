@@ -7,9 +7,11 @@ import nightscout_to_json
 import json
 import os
 import re
+import datetime
 
 app = Flask(__name__)
 
+CACHE = {}
 
 @app.route("/")
 def index():
@@ -32,11 +34,27 @@ def stats(url):
         return '<p>Error, need positive days, and at maximum 90</p>'
     if not re.match(r'^[0-9a-z\-.]+$', url):
         return '<p>Error, URL malformed, no http or https, https is preprepended automatically</p>'
-    url = 'https://' + url
-    print(url, start, end, days)
-    resp = ""
-    ret, new, log = nightscout_to_json.run(url, start=start, end=end, days=days, cache=False)
-    data = nightscout_to_json.stats(new)
+    
+    cache_key = (url, start, end, days, raw)
+    cache_contents = CACHE.get(cache_key, None)
+    data = None
+    if cache_contents:
+        data = cache_contents['data']
+        delta = datetime.datetime.now() - cache_contents['date']
+        print('Delta', delta)
+        if delta > datetime.timedelta(hours=1):
+            print('Cache too old')
+            data = None
+        else:
+            print('Using cached content')
+
+    if not data:
+        url = 'https://' + url
+        resp = ""
+        ret, new, log = nightscout_to_json.run(url, start=start, end=end, days=days, cache=False)
+        data = nightscout_to_json.stats(new)
+        CACHE[cache_key] = {'date': datetime.datetime.now(), 'data': data}
+
     if raw:
         data['raw'] = new
     return app.response_class(
