@@ -64,7 +64,8 @@ class Nightscout(object):
 
   def convert(self, profile, entries, treatments, tz):
     log = []
-    ps = profile[0]['store']['Default']
+    defaultProfile = profile[0]['defaultProfile']
+    ps = profile[0]['store'][defaultProfile]
     tz = pytz.timezone(ps['timezone'])
     common = {
             'version': 1,
@@ -251,7 +252,7 @@ class Nightscout(object):
             basal_timeline['durations'][-1] = delta
 
         if len(basal_timeline['index']) and ts == basal_timeline['index'][-1]:
-            log.append('overwrite duplicate basal ts', ts)
+            log.append('overwrite duplicate basal ts: %d' % ts)
             basal_timeline['durations'][-1] = duration
             basal_timeline['values'][-1] = rate
         else:
@@ -484,7 +485,8 @@ def run(url, start, end, days):
     pass
 
   profile = j.get('p') or dl.download('profile')
-  tz = profile[0]['store']['Default']['timezone']
+  defaultProfile = profile[0]['defaultProfile']
+  tz = profile[0]['store'][defaultProfile]['timezone']
   #today = today.replace(tzinfo=pytz.timezone(tz))
   today = today.astimezone(pytz.timezone(tz))
   startdate = today - timedelta(days=days)
@@ -495,11 +497,11 @@ def run(url, start, end, days):
   treatments = j.get('t') or dl.download(
           'treatments',
           {'find[created_at][$gte]': startdate, 'find[created_at][$lte]':
-          enddate, 'count': '100000'})
+          enddate, 'count': '10000'})
   entries = j.get('e') or dl.download(
           'entries',
           {'find[dateString][$gte]': startdate, 'find[dateString][$lte]:':
-          enddate, 'count': '100000'})
+          enddate, 'count': '10000'})
   if not j:
     open(cache_fn, 'w').write(json.dumps({'p': profile, 'e': entries, 't': treatments}, indent=4, sort_keys=True))
   return dl.convert(profile, entries, treatments, tz)

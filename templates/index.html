@@ -1,0 +1,33 @@
+<!doctype html>
+
+<script>
+function stats() {
+        var url = document.getElementById('url').value;
+        if (!url) {
+                alert('Hostname must not be empty');
+                return false;
+        }
+        var days = document.getElementById('days').value * 1;
+        if (days > 90) {
+                alert('Allow only up to 90 days of analysis');
+                return false;
+        }
+        var e = document.getElementById('stats');
+        e.action = '{{ stats_url }}'.replace('URL', url);
+        e.submit();
+}
+</script>
+
+<p>
+        <label for="url">Hostname (without https://)</label>
+        <input type="text" name="url" size="80" id="url">
+</p>
+<form id="stats">
+        <p>
+        <label for="days">Days of history to analyze</label>
+        <input type="text" name="days" value="7" size="5" id="days">
+        </p>
+        <p>
+        <input type="button" onclick="stats(); return false;" value="Get stats">
+        </p>
+</form>

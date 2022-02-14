@@ -1,5 +1,7 @@
 from flask import Flask
+from flask import render_template
 from flask import request
+from flask import url_for
 
 import nightscout_to_json
 import json
@@ -10,9 +12,13 @@ app = Flask(__name__)
 
 @app.route("/")
 def index():
-    return "<p>Hello, World!</p>"
+    p = {
+        'stats_url': url_for('stats', url='URL')
+    }
+    return render_template('index.html', **p)
 
-@app.route("/stats/<url>")
+
+@app.route("/<url>/stats.json")
 def stats(url):
     start = request.args.get('start', None)
     end = request.args.get('end', None)
@@ -21,8 +27,8 @@ def stats(url):
     except ValueError:
         return '<p>Error, days need to be positive integers</p>'
     raw = bool(request.args.get('raw', False))
-    if not days or days < 1:
-        return '<p>Error, need positive days</p>'
+    if not days or days < 1 or days > 90:
+        return '<p>Error, need positive days, and at maximum 90</p>'
     if not re.match(r'^[0-9a-z\-.]+$', url):
         return '<p>Error, URL malformed, no http or https, https is preprepended automatically</p>'
     url = 'https://' + url
