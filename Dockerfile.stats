@@ -1,4 +1,6 @@
 # docker build -t trixing/nightscout-stats -f Dockerfile.stats .
+# docker tag trixing/nightscout-stats:latest registry.trixing.net/trixing/nightscout-stats:latest
+# docker push registry.trixing.net/trixing/nightscout-stats:latest
 
 FROM python:3
 
