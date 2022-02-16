@@ -30,11 +30,14 @@ def stats(url):
     except ValueError:
         return '<p>Error, days need to be positive integers</p>'
     raw = bool(request.args.get('raw', False))
+
     if not days or days < 1 or days > 90:
         return '<p>Error, need positive days, and at maximum 90</p>'
+
+    url = url.lower()
     if not re.match(r'^[0-9a-z\-.]+$', url):
-        return '<p>Error, URL malformed, no http or https, https is preprepended automatically</p>'
-    
+        return '<p>Error, URL malformed, no http or https, https:// is preprepended automatically</p>'
+
     cache_key = (url, start, end, days, raw)
     cache_contents = CACHE.get(cache_key, None)
     data = None
