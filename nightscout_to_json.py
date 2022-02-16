@@ -348,6 +348,10 @@ class Nightscout(object):
     'basal': new_basal.tolist(),
     'carbs': new_carbs,
     }
+    new['insulin'] = []
+    for i in range(len(new['bolus'])):
+        new['insulin'].append(
+            new['bolus'][i] + new['basal'][i] + new['prog_basal'][i])
     for v in new_basal + new_prog_basal:
        if v < -0.1:
           log.append(v)
@@ -408,7 +412,7 @@ def stats(new):
             }
 
         glucose = new['glucose'][i]
-        insulin = new['bolus'][i] + new['basal'][i] + new['prog_basal'][i]
+        insulin = new['insulin'][i]
         carbs = 0
         for absorption, x in new['carbs'].items():
             carbs += x[i]
