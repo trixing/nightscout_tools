@@ -342,7 +342,7 @@ class Nightscout(object):
 
     'timeline': new_timeline.tolist(),
     'glucose': new_glucose.tolist(),
-    'hours': [int(h) for h in new_hours.tolist()],
+    'hours': new_hours.tolist(),
     'prog_basal': new_prog_basal.tolist(),
     'bolus': new_bolus.tolist(),
     'basal': new_basal.tolist(),
