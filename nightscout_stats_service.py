@@ -8,6 +8,8 @@ import json
 import os
 import re
 import datetime
+import html
+
 
 app = Flask(__name__)
 
@@ -56,7 +58,10 @@ def get_data(url, request):
     if not data:
         url = 'https://' + url
         resp = ""
-        ret, new, log = nightscout_to_json.run(url, start=start, end=end, days=days, cache=False)
+        try:
+            ret, new, log = nightscout_to_json.run(url, start=start, end=end, days=days, cache=False)
+        except Exception as e:
+            return '<p>Error getting data from host %s: %s</p>' % (url, html.escape(str(e)))
         data = nightscout_to_json.stats(new)
         CACHE[cache_key] = {'date': datetime.datetime.now(), 'data': data, 'raw': new}
 
@@ -65,7 +70,10 @@ def get_data(url, request):
 
 @app.route("/<url>/stats.json")
 def stats(url):
-    data, new = get_data(url, request)
+    ret = get_data(url, request)
+    if type(ret) == str:
+        return ret
+    data, new = ret
     return app.response_class(
         response=json.dumps(data, indent=4),
         status=200,
@@ -75,7 +83,10 @@ def stats(url):
 
 @app.route("/<url>/all.json")
 def all_data(url):
-    data, new = get_data(url, request)
+    ret = get_data(url, request)
+    if type(ret) == str:
+        return ret
+    data, new = ret
     data['all'] = new
     return app.response_class(
         response=json.dumps(data, indent=4),
