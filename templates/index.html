@@ -33,6 +33,29 @@ function stats() {
         </p>
 </form>
 
+<h3>Normalized Data</h3>
+<p>
+You can use {{ all_url }} to get all Nightscout data in a normalized timeline,
+ready to be used by e.g. matplotlib or other tools.
+
+In colab try:
+<pre>
+nightscout_host = "sample.host.trixing.net" #@param {type:"string"}
+
+import matplotlib.pyplot as plt
+import requests
+
+data = requests.get('https://nshistory.trixing.net/' + nightscout_host + '/all.json').json()
+dates = [x['date'] for x in data['daily']]
+insulin = [x['insulin'] for x in data['daily']]
+plt.plot(dates, insulin, 'o')
+# or
+timeline = data['all']['timeline']
+glucose = data['all']['glucose']
+plt.plot(timeline, glucose)
+</pre>
+</p>
+
 <h3>Known Issues</h3>
 <ul>
         <li>Timezone logic is wonky

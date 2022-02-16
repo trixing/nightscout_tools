@@ -16,13 +16,14 @@ CACHE = {}
 @app.route("/")
 def index():
     p = {
-        'stats_url': url_for('stats', url='URL')
+        'stats_url': url_for('stats', url='URL'),
+        'all_url': url_for('all_data', url='URL')
     }
     return render_template('index.html', **p)
 
 
-@app.route("/<url>/stats.json")
-def stats(url):
+
+def get_data(url, request):
     start = request.args.get('start', None)
     end = request.args.get('end', None)
     try:
@@ -43,6 +44,7 @@ def stats(url):
     data = None
     if cache_contents:
         data = cache_contents['data']
+        new = cache_contents['raw']
         delta = datetime.datetime.now() - cache_contents['date']
         print('Delta', delta)
         if delta > datetime.timedelta(hours=1):
@@ -56,10 +58,25 @@ def stats(url):
         resp = ""
         ret, new, log = nightscout_to_json.run(url, start=start, end=end, days=days, cache=False)
         data = nightscout_to_json.stats(new)
-        CACHE[cache_key] = {'date': datetime.datetime.now(), 'data': data}
+        CACHE[cache_key] = {'date': datetime.datetime.now(), 'data': data, 'raw': new}
 
-    if raw:
-        data['raw'] = new
+    return data, new
+
+
+@app.route("/<url>/stats.json")
+def stats(url):
+    data, new = get_data(url, request)
+    return app.response_class(
+        response=json.dumps(data, indent=4),
+        status=200,
+        mimetype='application/json'
+    )
+
+
+@app.route("/<url>/all.json")
+def all_data(url):
+    data, new = get_data(url, request)
+    data['all'] = new
     return app.response_class(
         response=json.dumps(data, indent=4),
         status=200,
