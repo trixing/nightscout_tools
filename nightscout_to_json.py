@@ -159,7 +159,7 @@ class Nightscout(object):
         max_dt = max(max_dt or dt, dt)
         glucose['index'].append(ots)
         glucose['values'].append(e['sgv'])
-        glucose['hours'].append(lt.hour)
+        glucose['hours'].append(lt.hour + (lt.minute*60 + lt.second)/3600.0)
 
         if len(glucose['index']) >= 2:
             default_basal = lookup_basal(lt.hour)
@@ -418,13 +418,14 @@ def stats(new):
             carbs += x[i]
         wd = lastdate.weekday()
 
-        stats_hourly[new['hours'][i]] += insulin
-        carbs_hourly[new['hours'][i]] += carbs
-        glucose_hourly[new['hours'][i]].append(glucose)
+        hour = int(new['hours'][i])
+        stats_hourly[hour] += insulin
+        carbs_hourly[hour] += carbs
+        glucose_hourly[hour].append(glucose)
 
-        stats_wd_hourly[(wd, new['hours'][i])] += insulin
-        carbs_wd_hourly[(wd, new['hours'][i])] += carbs
-        glucose_wd_hourly[(wd, new['hours'][i])].append(glucose)
+        stats_wd_hourly[(wd, hour)] += insulin
+        carbs_wd_hourly[(wd, hour)] += carbs
+        glucose_wd_hourly[(wd, hour)].append(glucose)
 
         stats['tdd'] += insulin
         stats['carbs'] += carbs
