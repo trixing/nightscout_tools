@@ -83,17 +83,27 @@ class Nightscout(object):
            'timelines': [],
     }
     ret = copy.deepcopy(common)
+    def seconds(x):
+        # see https://github.com/nightscout/cgm-remote-monitor/blob/46418c7ff275ae80de457209c1686811e033b5dd/lib/profilefunctions.js#L58
+        if 'time' in x:
+            p = x['time'].split(':')
+            if len(p) == 2:
+                return int(p[0])*3600 + int(p[1])*60
+        if 'timeAsSeconds' in x:
+            return int(x['timeAsSeconds'])
+        return 0
+
     ret.update({
             'insulin_sensitivity_schedule': {
-                'index': [int(x['timeAsSeconds'] / 60) for x in ps['sens']],
+                'index': [seconds(x)/60 for x in ps['sens']],
                 'values': [x['value'] for x in ps['sens']],
             },
             'carb_ratio_schedule': {
-                'index': [int(x['timeAsSeconds'] / 60) for x in ps['carbratio']],
+                'index': [seconds(x)/60 for x in ps['carbratio']],
                 'values': [x['value'] for x in ps['carbratio']],
             },
             'basal_rate_schedule': {
-                'index': [int(x['timeAsSeconds'] / 60) for x in ps['basal']],
+                'index': [seconds(x)/60 for x in ps['basal']],
                 'values': [x['value'] for x in ps['basal']],
             },
     }) 
