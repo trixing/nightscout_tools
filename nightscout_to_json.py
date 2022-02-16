@@ -361,9 +361,9 @@ class Nightscout(object):
     return ret, new, log
 
 def stats(new):
+    daily = []
     j = {
-      'tz': new['tz'],
-      'daily': []
+      'tz': new['tz']
     }
     lastdate = None
     stats_hourly = {}
@@ -389,7 +389,7 @@ def stats(new):
         dt = datetime.fromtimestamp(new['timeline'][i])
         if not lastdate or dt.date() != lastdate:
             if lastdate:
-                j['daily'].append({
+                daily.append({
                     'date': lastdate.isoformat(),
                     'weekday': lastdate.strftime('%a'),
                     'insulin': round(stats['tdd'], 1),
@@ -425,12 +425,10 @@ def stats(new):
         stats['tdd'] += insulin
         stats['carbs'] += carbs
         stats['glucose'] += glucose
-        
+
         samples += 1
 
-    j['days'] = days
-    j['weekdays'] = wd_count
-    j['daily'].append({
+    daily.append({
                     'date': lastdate.isoformat(),
                     'weekday': lastdate.strftime('%a'),
                     'insulin': round(stats['tdd'], 1),
@@ -438,6 +436,15 @@ def stats(new):
                     'glucose': round(stats['glucose'] / samples, 0),
                     'samples': samples
     })
+    insulin = [x['insulin'] for x in daily]
+    j['days'] = days
+    j['tdd'] = {
+        'avg': sum(insulin)/len(insulin),
+        'weighted': 0.6*sum(insulin)/len(insulin) + 0.4*insulin[-1],
+        'yesterday': insulin[-1]
+    }
+    j['weekdays'] = wd_count
+    j['daily'] = daily
     j['hourly'] = []
     for i in range(24):
         stats_hourly[i] /= days
