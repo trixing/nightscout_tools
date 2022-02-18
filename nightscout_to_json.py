@@ -189,7 +189,7 @@ class Nightscout(object):
 
     new_prog_basal = np.array([lookup_basal(int(h))*bucket_size/3600 for h in new_hours])
     new_bolus = np.zeros(nbuckets)
-    new_carbs = np.zeros(nbuckets) 
+    new_carbs = np.zeros(nbuckets)
     new_basal = np.zeros(nbuckets)
 
     def get_bucket(ts):
@@ -314,7 +314,7 @@ class Nightscout(object):
         if bucket < len(new_bolus):
             new_bolus[bucket] += units
         else:
-            log.append('Found bolus out of bounds: ts %d, units %.2f, last bucket %d' % (ts, units, len(new_bolus)))
+            log.append('Found bolus out of bounds: ts %d, units %.2f, last bucket %d, max_ts %d' % (ts, units, len(new_bolus), max_ts))
 
     encode(bolus_timeline['index'])
     encode(bolus_timeline['values'])
@@ -337,7 +337,10 @@ class Nightscout(object):
             #    print('tweak duplicate carb ts', ts)
             #    ts += 1
             bucket = get_bucket(ts)
-            nc[bucket] += amount
+            if bucket < len(nc):
+                nc[bucket] += amount
+            else:
+                log.append('Found carb entry out of bounds: ts %d, max_ts %d, carbs %f' % (ts, max_ts, amount))
             carb_timeline['index'].append(ots)
             carb_timeline['values'].append(amount)
         encode(carb_timeline['index'])
