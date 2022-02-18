@@ -13,6 +13,7 @@ import html
 
 app = Flask(__name__)
 
+DEBUG = (os.getenv('FLASK_ENV', 'development') == 'development')
 CACHE = {}
 
 @app.route("/")
@@ -61,7 +62,13 @@ def get_data(url, request):
         try:
             ret, new, log = nightscout_to_json.run(url, start=start, end=end, days=days, cache=False)
         except Exception as e:
-            return '<p>Error getting data from host %s: %s</p>' % (url, html.escape(str(e)))
+            print(e)
+            if DEBUG or request.args.get('debug', 0):
+                raise e
+            else:
+                return '<p>Error getting data from host %s: %s</p>' % (url, html.escape(str(e)))
+        for l in log:
+            print('  Debug: ', l)
         data = nightscout_to_json.stats(new)
         CACHE[cache_key] = {'date': datetime.datetime.now(), 'data': data, 'raw': new}
 
@@ -96,4 +103,4 @@ def all_data(url):
 
 
 if __name__ == '__main__':
-    app.run(debug=os.getenv('FLASK_ENV', 'development') == 'development', host='0.0.0.0')
+    app.run(debug=DEBUG, host='0.0.0.0')
