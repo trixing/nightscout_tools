@@ -311,7 +311,10 @@ class Nightscout(object):
         bolus_timeline['index'].append(ots)
         bolus_timeline['values'].append(units)
         bucket = get_bucket(ts)
-        new_bolus[bucket] += units
+        if bucket < len(new_bolus):
+            new_bolus[bucket] += units
+        else:
+            log.append('Found bolus out of bounds: ts %d, units %.2f, last bucket %d' % (ts, units, len(new_bolus)))
 
     encode(bolus_timeline['index'])
     encode(bolus_timeline['values'])
