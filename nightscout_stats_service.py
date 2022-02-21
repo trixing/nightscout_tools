@@ -18,8 +18,6 @@ class RequestFormatter(logging.Formatter):
             record.url = None
             record.remote_addr = None
 
-        print(record)
-
         msg = super().format(record)
         msg = re.sub(r'token=[^&]+', 'token=<private>', msg)
         return msg
