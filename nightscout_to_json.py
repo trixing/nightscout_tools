@@ -72,7 +72,11 @@ class Nightscout(object):
         raise Exception(response.status_code, response.text)
     return response.json()
 
-  def convert(self, profile, entries, treatments, tz):
+  def convert(self, startdate, enddate,
+              profile, entries, treatments, tz,
+              bucket_size=None):
+    if not bucket_size:
+        bucket_size = 300
     log = []
     defaultProfile = profile[0]['defaultProfile']
     ps = profile[0]['store'][defaultProfile]
@@ -116,7 +120,7 @@ class Nightscout(object):
                 'index': [seconds(x)/60 for x in ps['basal']],
                 'values': [x['value'] for x in ps['basal']],
             },
-    }) 
+    })
 
     def lookup(hour, schedule):
         minutes = hour * 60
@@ -186,9 +190,10 @@ class Nightscout(object):
             basal_default_timeline['index'].append(glucose['index'][-2])
             basal_default_timeline['values'].append(default_basal)
             basal_default_timeline['durations'].append(ots - glucose['index'][-2])
-    min_ts = int(datetime.timestamp(min_dt))
-    max_ts = int(datetime.timestamp(max_dt))
-    bucket_size = 300
+    # min_ts = int(datetime.timestamp(min_dt))
+    # max_ts = int(datetime.timestamp(max_dt))
+    min_ts = int(datetime.timestamp(startdate))
+    max_ts = int(datetime.timestamp(enddate))
 
     nbuckets = (max_ts - min_ts) // bucket_size
     new_timeline = np.array([min_ts + i*bucket_size for i in range(nbuckets)])
@@ -242,7 +247,7 @@ class Nightscout(object):
         else:
            #print('ignored', t['eventType'])
            pass
-    
+
     basal_timeline = {
             'type': 'basal',
             'parameters': ret['basal_insulin_parameters'],
@@ -293,9 +298,10 @@ class Nightscout(object):
           p = value / 3600 * min(bucket_size, duration)
           # print(lt.hour, duration, lookup_basal(lt.hour), rate, value, p)
           if bucket + i < len(new_basal):
-               new_basal[bucket + i] += p
+              if bucket + i >= 0:
+                  new_basal[bucket + i] += p
           else:
-               break
+              break
           duration -= bucket_size
           i += 1
           lt += timedelta(seconds=bucket_size)
@@ -321,7 +327,7 @@ class Nightscout(object):
         bolus_timeline['index'].append(ots)
         bolus_timeline['values'].append(units)
         bucket = get_bucket(ts)
-        if bucket < len(new_bolus):
+        if bucket < len(new_bolus) and bucket >= 0:
             new_bolus[bucket] += units
         else:
             log.append('Found bolus out of bounds: ts %d, units %.2f, last bucket %d, max_ts %d' % (ts, units, len(new_bolus), max_ts))
@@ -347,7 +353,7 @@ class Nightscout(object):
             #    print('tweak duplicate carb ts', ts)
             #    ts += 1
             bucket = get_bucket(ts)
-            if bucket < len(nc):
+            if bucket < len(nc) and bucket >= 0:
                 nc[bucket] += amount
             else:
                 log.append('Found carb entry out of bounds: ts %d, max_ts %d, carbs %f' % (ts, max_ts, amount))
@@ -545,7 +551,8 @@ def stats(new):
     return j
 
 
-def run(url, start, end, days, cache=True, token=None, hashed_secret=None):
+def run(url, start, end, days, cache=True, token=None, hashed_secret=None,
+        bucket_size=None):
   today = datetime.combine(date.today(), datetime.min.time())
   dl = Nightscout(url, secret=None, token=token, hashed_secret=hashed_secret)
   host = url.replace('https://', '').replace('http://', '')
@@ -561,22 +568,26 @@ def run(url, start, end, days, cache=True, token=None, hashed_secret=None):
   tz = profile[0]['store'][defaultProfile]['timezone']
   #today = today.replace(tzinfo=pytz.timezone(tz))
   today = today.astimezone(pytz.timezone(tz))
+
   startdate = today - timedelta(days=days)
   enddate = startdate + timedelta(days=days)
-  startdate = startdate.astimezone(pytz.utc).isoformat()
-  enddate = enddate.astimezone(pytz.utc).isoformat()
+
+  # Retrieve slightly more than necessary to account for
+  # temp basals starting the previous day
+  startdate_ns = (startdate - timedelta(hours=2)).astimezone(pytz.utc).isoformat()
+  enddate_ns = (enddate + timedelta(hours=1)).astimezone(pytz.utc).isoformat()
 
   treatments = j.get('t') or dl.download(
           'treatments',
-          {'find[created_at][$gte]': startdate, 'find[created_at][$lte]':
-          enddate, 'count': '10000'})
+          {'find[created_at][$gte]': startdate_ns, 'find[created_at][$lte]':
+          enddate_ns, 'count': '10000'})
   entries = j.get('e') or dl.download(
           'entries',
-          {'find[dateString][$gte]': startdate, 'find[dateString][$lte]:':
-          enddate, 'count': '10000'})
+          {'find[dateString][$gte]': startdate_ns, 'find[dateString][$lte]:':
+          enddate_ns, 'count': '10000'})
   if not j and cache:
     open(cache_fn, 'w').write(json.dumps({'p': profile, 'e': entries, 't': treatments}, indent=4, sort_keys=True))
-  return dl.convert(profile, entries, treatments, tz)
+  return dl.convert(startdate, enddate, profile, entries, treatments, tz, bucket_size=bucket_size)
 
 
 if __name__ == '__main__':
