@@ -3,18 +3,22 @@ from flask import render_template
 from flask import request
 from flask import url_for
 
-import nightscout_to_json
 import json
 import os
 import re
 import datetime
 import html
+import logging
+
+import nightscout_to_json
+
+
+DEBUG = (os.getenv('FLASK_ENV', 'development') == 'development')
+CACHE = {}
 
 
 app = Flask(__name__)
 
-DEBUG = (os.getenv('FLASK_ENV', 'development') == 'development')
-CACHE = {}
 
 @app.route("/")
 def index():
@@ -29,6 +33,8 @@ def index():
 def get_data(url, request):
     start = request.args.get('start', None)
     end = request.args.get('end', None)
+    token = request.args.get('token', None)
+    api_secret = request.headers.get('api-secret', None)
     try:
         days = int(request.args.get('days', 7))
     except ValueError:
@@ -60,7 +66,8 @@ def get_data(url, request):
         url = 'https://' + url
         resp = ""
         try:
-            ret, new, log = nightscout_to_json.run(url, start=start, end=end, days=days, cache=False)
+            ret, new, log = nightscout_to_json.run(url, start=start, end=end, days=days, cache=False,
+                                                   token=token, hashed_secret=api_secret)
         except Exception as e:
             print(e)
             if DEBUG or request.args.get('debug', 0):

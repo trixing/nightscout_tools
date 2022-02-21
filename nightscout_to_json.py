@@ -39,10 +39,13 @@ TZ='Europe/Berlin'
 
 class Nightscout(object):
 
-  def __init__(self, url, secret=None):
+  def __init__(self, url, secret=None, token=None, hashed_secret=None):
     self.url = url
     self.secret = None
-    if secret:
+    self.token = token
+    if hashed_secret:
+        self.secret = hashed_secret
+    elif secret:
         self.secret = hashlib.sha1(secret.encode('utf-8')).hexdigest()
     self.batch = []
 
@@ -56,9 +59,16 @@ class Nightscout(object):
         headers.update({
             'api-secret': self.secret,
         })
+
+    params = params or {}
+    if self.token:
+        params.update({
+            'token': self.token
+        })
+
     response = requests.get(url, params=params, headers=headers)
     if response.status_code != 200:
-        print(response.status_code, response.text)
+        print('Server Error', response.status_code, response.text)
         raise Exception(response.status_code, response.text)
     return response.json()
 
@@ -535,9 +545,9 @@ def stats(new):
     return j
 
 
-def run(url, start, end, days, cache=True):
+def run(url, start, end, days, cache=True, token=None, hashed_secret=None):
   today = datetime.combine(date.today(), datetime.min.time())
-  dl = Nightscout(url, None)
+  dl = Nightscout(url, secret=None, token=token, hashed_secret=hashed_secret)
   host = url.replace('https://', '').replace('http://', '')
   cache_fn = 'cache_%s_%s_%d.json' % (host, today.isoformat(), days)
   j = {}
