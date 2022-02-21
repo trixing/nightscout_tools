@@ -55,16 +55,12 @@ class Nightscout(object):
     headers = {
             'Content-Type': 'application/json',
     }
-    if self.secret:
+    if self.secret or self.token:
         headers.update({
-            'api-secret': self.secret,
+            'api-secret': self.secret or self.token,
         })
 
     params = params or {}
-    if self.token:
-        params.update({
-            'token': self.token
-        })
 
     response = requests.get(url, params=params, headers=headers)
     if response.status_code != 200:
