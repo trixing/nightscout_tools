@@ -500,7 +500,7 @@ def stats(new):
     }
     j['overall'] = {
         'total': overall.format({'days': days}),
-        'daily_average': sum(daily).format({}, days)
+        'daily_average': sum(daily).format({'days': days}, days)
     }
     j['daily'] = [day.format() for day in daily]
     j['hourly'] = [stats_hourly[i].format({'hour': i}, days) for i in range(24)]

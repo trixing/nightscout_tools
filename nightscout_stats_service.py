@@ -154,6 +154,48 @@ def stats(url):
     )
 
 
+@app.route("/<url>/marc.json")
+def marc(url):
+    ret = get_data(url, request)
+    if type(ret) == str:
+        return ret
+    data, new = ret
+    daily = data['overall']['daily_average']
+    data = {
+        'tdd': daily['insulin'],
+        'basal': daily['prog_basal'],
+        'carbs': daily['carbs'],
+        'url': data['url'],
+        'generated': data['generated']
+    }
+    return app.response_class(
+        response=json.dumps(data, indent=4),
+        status=200,
+        mimetype='application/json'
+    )
+
+
+@app.route("/<url>/<part>.csv")
+def daily_csv(url, part):
+    ret = get_data(url, request)
+    if type(ret) == str:
+        return ret
+    data, new = ret
+    s = []
+    if part == 'daily_average':
+        for k, v in data['overall']['daily_average'].items():
+            s.append('"%s",%.1f' % (k, v))
+    else:
+        abort(404)
+    return app.response_class(
+        response='\n'.join(s),
+        status=200,
+        mimetype='text/plain'
+    )
+
+
+
+
 @app.route("/<url>/all.json")
 def all_data(url):
     ret = get_data(url, request)
