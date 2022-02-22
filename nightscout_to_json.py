@@ -426,6 +426,8 @@ class Stats(dict):
                 r[k] = round(v/norm, 1)
             elif k in ('glucose',):
                 r[k] = round(v/self.get('samples', 1), 1)
+            elif k in ('samples',):
+                pass
             else:
                 r[k] = v
         if other:
