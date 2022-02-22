@@ -113,7 +113,7 @@ def get_data(url, request):
             data = None
         else:
             logging.info('Using cached content from %s', cache_contents['date'])
-            data['cached'] = cache_contents['date'].isoformat()
+            data['cached'] = True
 
     if not data:
         url = 'https://' + url
@@ -134,6 +134,8 @@ def get_data(url, request):
         for l in log:
             logging.info('  Debug: ', l)
         data = nightscout_to_json.stats(new)
+        data['url'] = url
+        data['generated'] = datetime.datetime.now().isoformat()
         CACHE[cache_key] = {'date': datetime.datetime.now(), 'data': data, 'raw': new}
 
     return data, new
