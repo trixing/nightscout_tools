@@ -396,158 +396,152 @@ class Nightscout(object):
     new.update(common)
     return ret, new, log
 
+class Stats(dict):
+
+    def add(self, other):
+        for x, v in other.items():
+            self[x] = self.get(x, 0) + v
+
+    def __add__(self, other):
+        return self.__radd__(other)
+
+    def __radd__(self, other):
+        s = Stats()
+        for x, v in self.items():
+            if type(v) in (float, int):
+                s[x] = v
+
+        if type(other) in (Stats, dict):
+            for x, v in other.items():
+                if type(v) in (float, int):
+                    s[x] = s.get(x, 0) + v
+
+        return s
+
+    def format(self, other=None, norm=1):
+        r = {}
+        for k, v in self.items():
+            if k in ('insulin', 'carbs',
+                     'basal', 'prog_basal'):
+                r[k] = round(v/norm, 1)
+            elif k in ('glucose',):
+                r[k] = round(v/self.get('samples', 1), 1)
+            else:
+                r[k] = v
+        if other:
+            r.update(other)
+        return r
+
+
 def stats(new):
-    daily = []
     j = {
       'tz': new['tz']
     }
-    lastdate = None
-    stats_hourly = {}
-    carbs_hourly = {}
-    glucose_hourly = {}
-    stats_wd_hourly = {}
-    carbs_wd_hourly = {}
-    glucose_wd_hourly = {}
-    wd_count = collections.defaultdict(int)
-    for i in range(24):
-        stats_hourly[i] = 0
-        carbs_hourly[i] = 0
-        glucose_hourly[i] = []
-        for wd in range(7):
-            stats_wd_hourly[(wd, i)] = 0
-            carbs_wd_hourly[(wd, i)] = 0
-            glucose_wd_hourly[(wd, i)] = []
-    stats = {}
-    days = 0
-    samples = 0
 
+    overall = Stats()
+    daily = []
+    stats = {}
+    stats_hourly = {}
+    stats_wd_hourly = {}
+    wd_count = {}
+    for i in range(24):
+        stats_hourly[i] = Stats()
+        for wd in range(7):
+            stats_wd_hourly[(wd, i)] = Stats()
+            wd_count[wd] = 0
+
+
+    lastdate = None
+    day = Stats()
     for i, t in enumerate(new['timeline']):
         dt = datetime.fromtimestamp(new['timeline'][i])
         if not lastdate or dt.date() != lastdate:
             if lastdate:
-                daily.append({
+                day.update({
                     'date': lastdate.isoformat(),
                     'weekday': lastdate.strftime('%a'),
-                    'insulin': round(stats['tdd'], 1),
-                    'carbs': round(stats['carbs'], 1),
-                    'glucose': round(stats['glucose'] / samples, 0),
-                    'samples': samples
                 })
-            days += 1
-            samples = 0
+                daily.append(day)
             lastdate = dt.date()
             wd_count[lastdate.weekday()] += 1
-            stats = {
-                'tdd': 0,
-                'carbs': 0,
-                'glucose': 0
-            }
+            day = Stats()
 
-        glucose = new['glucose'][i]
-        insulin = new['insulin'][i]
-        carbs = 0
-        for absorption, x in new['carbs'].items():
-            carbs += x[i]
+        point = Stats(
+            glucose = new['glucose'][i],
+            insulin = new['insulin'][i],
+            carbs = sum(x[i] for x in new['carbs'].values()),
+            basal = new['basal'][i] + new['prog_basal'][i],
+            prog_basal = new['prog_basal'][i],
+            samples = 1)
+
         wd = lastdate.weekday()
-
         hour = int(new['hours'][i])
-        stats_hourly[hour] += insulin
-        carbs_hourly[hour] += carbs
-        glucose_hourly[hour].append(glucose)
 
-        stats_wd_hourly[(wd, hour)] += insulin
-        carbs_wd_hourly[(wd, hour)] += carbs
-        glucose_wd_hourly[(wd, hour)].append(glucose)
+        stats_hourly[hour].add(point)
+        stats_wd_hourly[(wd, hour)].add(point)
 
-        stats['tdd'] += insulin
-        stats['carbs'] += carbs
-        stats['glucose'] += glucose
+        day.add(point)
+        overall.add(point)
 
-        samples += 1
-
-    daily.append({
-                    'date': lastdate.isoformat(),
-                    'weekday': lastdate.strftime('%a'),
-                    'insulin': round(stats['tdd'], 1),
-                    'carbs': round(stats['carbs'], 1),
-                    'glucose': round(stats['glucose'] / samples, 0),
-                    'samples': samples
+    day.update({
+        'date': lastdate.isoformat(),
+        'weekday': lastdate.strftime('%a'),
     })
+    daily.append(day)
+    days = len(daily)
+
     insulin = [x['insulin'] for x in daily]
-    j['days'] = days
     j['tdd'] = {
-        'avg': sum(insulin)/len(insulin),
-        'weighted': 0.6*sum(insulin)/len(insulin) + 0.4*insulin[-1],
-        'yesterday': insulin[-1]
+        'avg': round(sum(insulin)/len(insulin), 1),
+        'weighted': round(0.6*sum(insulin)/len(insulin) + 0.4*insulin[-1], 1),
+        'yesterday': round(insulin[-1], 1)
     }
-    j['weekdays'] = wd_count
-    j['daily'] = daily
-    j['hourly'] = []
-    for i in range(24):
-        stats_hourly[i] /= days
-        carbs_hourly[i] /= days
-        glucose_avg = sum(glucose_hourly[i]) / len(glucose_hourly[i])
-        for wd in range(7):
-            if wd_count[wd] > 0:
-                stats_wd_hourly[(wd, i)] /= wd_count[wd]
-                carbs_wd_hourly[(wd, i)] /= wd_count[wd]
-            if glucose_wd_hourly[(wd, i)]:
-                glucose_wd_hourly[(wd, i)] = sum(glucose_wd_hourly[(wd, i)]) / len(glucose_wd_hourly[(wd, i)])
-            else:
-                glucose_wd_hourly[(wd, i)] = 0
-        j['hourly'].append({
-            'hour': i,
-            'insulin': round(stats_hourly[i], 2),
-            'carbs': round(carbs_hourly[i], 1),
-            'glucose': round(glucose_avg, 0)
-        })
+    j['overall'] = {
+        'total': overall.format({'days': days}),
+        'daily_average': sum(daily).format({}, days)
+    }
+    j['daily'] = [day.format() for day in daily]
+    j['hourly'] = [stats_hourly[i].format({'hour': i}, days) for i in range(24)]
+
 
     week = (0, 1, 2, 3, 4)
     weekend = (5, 6)
 
     dayparts = dict(
-    Night = (0, 1, 2, 3, 4, 5, 21, 22, 23),
-    Breakfast = (6, 7, 8, 9),
-    Snack = (10, 11),
-    Lunch = (12, 13),
-    SnackAfternoon = (14, 15, 16, 17),
-    Dinner = (18, 19, 20)
+        Night = (0, 1, 2, 3, 4, 5, 21, 22, 23),
+        Breakfast = (6, 7, 8, 9),
+        Snack = (10, 11),
+        Lunch = (12, 13),
+        SnackAfternoon = (14, 15, 16, 17),
+        Dinner = (18, 19, 20)
     )
 
     j['pattern'] = {}
     for (desc, days) in (('Week', week), ('Weekend', weekend)):
         j['pattern'][desc] = []
-        tdd = 0
-        tdc = 0
-        tdg = []
+        allday = Stats()
         for part, hours in dayparts.items():
-            insulin = 0
-            carbs = 0
-            glucose = []
+            daypart = Stats()
+            daycount = 0
             for wd in days:
-                for h in hours: #range(24):
-                    insulin += stats_wd_hourly[(wd, h)]
-                    carbs += carbs_wd_hourly[(wd, h)]
-                    glucose.append(glucose_wd_hourly[(wd, h)])
+                for h in hours:
+                    daypart += stats_wd_hourly[(wd, h)]
 
-            insulin /= len(days)
-            carbs /= len(days)
-            j['pattern'][desc].append({
-                'daytime': part,
-                'insulin': round(insulin, 1),
-                'carbs': round(carbs, 1),
-                'glucose': round(sum(glucose)/len(glucose))
-            })
-            tdd += insulin
-            tdc += carbs
-            tdg.extend(glucose)
-        j['pattern'][desc].append({
+            if daycount > 0:
+                j['pattern'][desc].append(daypart.format({
+                    'daytime': part,
+                }, daycount))
+
+            allday.add(daypart)
+
+        alldaycount = sum(v for wd, v in wd_count.items() if wd in days)
+        if alldaycount > 0:
+            j['pattern'][desc].append(allday.format({
                 'daytime': 'Daily',
-                'insulin': round(tdd, 1),
-                'carbs': round(tdc, 1),
-                'glucose': round(sum(tdg)/len(tdg))
-        })
+            }, alldaycount))
 
+    # for debugging mostly
+    j['weekdays'] = wd_count
     return j
 
 
