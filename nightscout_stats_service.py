@@ -50,6 +50,29 @@ app = Flask(__name__)
 app.logger.addHandler(default_handler)
 
 
+class InvalidAPIUsage(Exception):
+
+            def __init__(self, message, status_code=500, payload=None):
+                        super().__init__()
+                        self.message = message
+                        self.status_code = status_code
+                        self.payload = payload
+
+
+@app.errorhandler(500)
+def invalid_api_usage(e):
+        return '<p>' + str(e) + '</p>', 500
+
+
+@app.errorhandler(InvalidAPIUsage)
+def invalid_api_usage_exception(e):
+        return render_template('error.html',
+                               message=e.message,
+                               status_code=e.status_code,
+                               request_url=html.escape(request.url)
+                              ), e.status_code
+
+
 @app.route("/")
 def index():
     p = {
@@ -68,15 +91,15 @@ def get_data(url, request):
     try:
         days = int(request.args.get('days', 7))
     except ValueError:
-        return '<p>Error, days need to be positive integers</p>'
+        raise InvalidAPIUsage('days needs to be a positive integer.')
     raw = bool(request.args.get('raw', False))
 
     if not days or days < 1 or days > 90:
-        return '<p>Error, need positive days, and at maximum 90</p>'
+        raise InvalidAPIUsage('days need to be positive and smaller than 90.')
 
     url = url.lower()
     if not re.match(r'^[0-9a-z\-.]+$', url):
-        return '<p>Error, URL malformed, no http or https, https:// is preprepended automatically</p>'
+        raise InvalidAPIUsage('URL malformed, no http or https needed, https:// is preprepended automatically.')
 
     cache_key = (url, start, end, days, raw)
     cache_contents = CACHE.get(cache_key, None)
@@ -85,12 +108,12 @@ def get_data(url, request):
         data = cache_contents['data']
         new = cache_contents['raw']
         delta = datetime.datetime.now() - cache_contents['date']
-        print('Delta', delta)
         if delta > datetime.timedelta(hours=1):
-            print('Cache too old')
+            logging.info('Cache too old: %s', delta)
             data = None
         else:
-            print('Using cached content')
+            logging.info('Using cached content from %s', cache_contents['date'])
+            data['cached'] = cache_contents['date'].isoformat()
 
     if not data:
         url = 'https://' + url
@@ -98,14 +121,18 @@ def get_data(url, request):
         try:
             ret, new, log = nightscout_to_json.run(url, start=start, end=end, days=days, cache=False,
                                                    token=token, hashed_secret=api_secret)
+        except nightscout_to_json.DownloadError as e:
+            logging.warning('Failed to contact upstream %s: %s' % (url, str(e)))
+            raise InvalidAPIUsage('failed to get data from Nightscout instance: ' + e.args[1], 504)
         except Exception as e:
-            print(e)
+            logging.warning('Error of type %s: %s' % (type(e), e))
+            logging.exception(e)
             if DEBUG or request.args.get('debug', 0):
                 raise e
             else:
-                return '<p>Error getting data from host %s: %s</p>' % (url, html.escape(str(e)))
+                raise InvalidAPIUsage('failed to process data from Nightscount instance.', 504)
         for l in log:
-            print('  Debug: ', l)
+            logging.info('  Debug: ', l)
         data = nightscout_to_json.stats(new)
         CACHE[cache_key] = {'date': datetime.datetime.now(), 'data': data, 'raw': new}
 

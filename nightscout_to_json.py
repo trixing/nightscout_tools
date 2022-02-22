@@ -37,6 +37,10 @@ from pprint import pprint
 TZ='Europe/Berlin'
 
 
+class DownloadError(Exception):
+    pass
+
+
 class Nightscout(object):
 
   def __init__(self, url, secret=None, token=None, hashed_secret=None):
@@ -65,7 +69,7 @@ class Nightscout(object):
     response = requests.get(url, params=params, headers=headers)
     if response.status_code != 200:
         print('Server Error', response.status_code, response.text)
-        raise Exception(response.status_code, response.text)
+        raise DownloadError(response.status_code, response.text)
     return response.json()
 
   def convert(self, startdate, enddate,
