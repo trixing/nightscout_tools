@@ -585,7 +585,7 @@ def stats(new):
             for wd in days:
                 for h in hours:
                     daypart += stats_wd_hourly[(wd, h)]
-                daycount += 1
+                daycount += wd_count[wd]
 
             if daycount > 0:
                 j['pattern'][desc].append(daypart.format({
