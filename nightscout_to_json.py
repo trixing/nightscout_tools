@@ -214,6 +214,10 @@ class Nightscout(object):
     new_carbs = np.zeros(nbuckets)
     new_basal = np.zeros(nbuckets)
 
+    new_iage = np.zeros(nbuckets)
+    new_cage = np.zeros(nbuckets)
+    new_sage = np.zeros(nbuckets)
+
     def get_bucket(ts):
        return (ts - min_ts) // bucket_size
 
@@ -228,6 +232,9 @@ class Nightscout(object):
 
     basal = []
     bolus = []
+    cage = []
+    iage = []
+    sage = []
     carbs = collections.defaultdict(list)
     for t in sorted(treatments, key=lambda x: x['created_at']):
         dt = dateutil.parser.parse(t['created_at'])
@@ -249,10 +256,16 @@ class Nightscout(object):
            carbs[t.get('absorptionTime', 180)].append((ts, t['carbs']))
         elif t['eventType'].startswith('Debug.'):
             pass
+        elif t['eventType'] == 'Site Change':
+            cage.append((ts, True))
+        elif t['eventType'] == 'Insulin Change':
+            iage.append((ts, True))
+        elif t['eventType'] in ('Sensor Change', 'Sensor Start',):
+            sage.append((ts, True))
         elif t['eventType'].startswith('Log.'):
             pass
         else:
-           #print('ignored', t['eventType'])
+           print('ignored', t['eventType'])
            pass
 
     basal_timeline = {
@@ -371,6 +384,22 @@ class Nightscout(object):
         ret['timelines'].append(carb_timeline)
         new_carbs[absorption] = nc.tolist()
 
+
+    for src, target in ((iage, new_iage), (cage, new_cage), (sage, new_sage)):
+        for ts, _ in src:
+            bucket = get_bucket(ts)
+            if bucket < len(nc) and bucket >= 0:
+                target[bucket] = 1
+        age = -1
+        for i, v in enumerate(target):
+            if age >= 0:
+                age += bucket_size
+            elif v == 1:
+                age = 0
+            target[i] = age
+
+
+
     new = {
     'size': bucket_size,
     'tz': str(tz),
@@ -387,6 +416,9 @@ class Nightscout(object):
     'bolus': new_bolus.tolist(),
     'basal': new_basal.tolist(),
     'carbs': new_carbs,
+    'iage': new_iage.tolist(),
+    'cage': new_cage.tolist(),
+    'sage': new_sage.tolist(),
     }
     new['insulin'] = []
     for i in range(len(new['bolus'])):
