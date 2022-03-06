@@ -35,6 +35,11 @@ from pprint import pprint
 
 
 TZ='Europe/Berlin'
+MGDL='mg/dl'
+
+MGDL_TO_MMOL = 18.0
+RANGE_LOW = 70
+RANGE_HIGH = 180
 
 
 class DownloadError(Exception):
@@ -80,10 +85,12 @@ class Nightscout(object):
     log = []
     defaultProfile = profile[0]['defaultProfile']
     ps = profile[0]['store'][defaultProfile]
+    bg_units = ps.get('units', profile[0].get('units', MGDL))
     tz = pytz.timezone(ps['timezone'])
     common = {
             'version': 1,
             'timezone': ps['timezone'],
+            'units': bg_units,
             'minimum_time_interval': 3600,
             'maximum_schedule_item_count': 24,
         #    'allowed_basal_rates': [n/10.0 for n in range(1, 20)],
@@ -367,6 +374,7 @@ class Nightscout(object):
     new = {
     'size': bucket_size,
     'tz': str(tz),
+    'units': bg_units,
 
     'carb_ratios': [lookup_carbs(h) for h in range(24)],
     'isf': [lookup_isf(h) for h in range(24)],
@@ -395,6 +403,7 @@ class Nightscout(object):
         log.append('total carbs %d min: %d g' % (absorption, sum(x)))
     new.update(common)
     return ret, new, log
+
 
 class Stats(dict):
 
@@ -425,8 +434,14 @@ class Stats(dict):
                      'basal', 'prog_basal'):
                 r[k] = round(v/norm, 1)
             elif k in ('glucose',):
-                r[k] = round(v/self.get('samples', 1), 1)
-            elif k in ('samples',):
+                avg = v/self.get('samples', 1)
+                r[k] = round(avg, 1)
+                units = self.get('units', MGDL)
+                avg_mgdl = avg if units == MGDL else avg * MGDL_TO_MMOL
+                r['A1C'] = round((avg_mgdl + 46.7) / 28.7, 1)
+            elif k in ('range_low', 'range_high', ):
+                r[k] = round(100 * v/self.get('samples', 1), 1)
+            elif k in ('samples', 'units', ):
                 pass
             else:
                 r[k] = v
@@ -436,8 +451,10 @@ class Stats(dict):
 
 
 def stats(new):
+    bg_units = new['units']
     j = {
-      'tz': new['tz']
+      'tz': new['tz'],
+      'units': bg_units
     }
 
     overall = Stats()
@@ -454,6 +471,11 @@ def stats(new):
 
 
     lastdate = None
+    range_low = RANGE_LOW
+    range_high = RANGE_HIGH
+    if bg_units != MGDL:
+        range_low = range_low / MGDL_TO_MMOL
+        range_high = range_high / MGDL_TO_MMOL
     day = Stats()
     for i, t in enumerate(new['timeline']):
         dt = datetime.fromtimestamp(new['timeline'][i])
@@ -470,6 +492,8 @@ def stats(new):
 
         point = Stats(
             glucose = new['glucose'][i],
+            range_low = 1 if new['glucose'][i] < range_low else 0,
+            range_high = 1 if new['glucose'][i] > range_high else 0,
             insulin = new['insulin'][i],
             carbs = sum(x[i] for x in new['carbs'].values()),
             basal = new['basal'][i] + new['prog_basal'][i],
@@ -493,11 +517,12 @@ def stats(new):
     days = len(daily)
 
     insulin = [x['insulin'] for x in daily]
-    j['tdd'] = {
-        'avg': round(sum(insulin)/len(insulin), 1),
-        'weighted': round(0.6*sum(insulin)/len(insulin) + 0.4*insulin[-1], 1),
-        'yesterday': round(insulin[-1], 1)
-    }
+    if insulin:
+        j['tdd'] = {
+            'avg': round(sum(insulin)/len(insulin), 1),
+            'weighted': round(0.6*sum(insulin)/len(insulin) + 0.4*insulin[-1], 1),
+            'yesterday': round(insulin[-1], 1)
+        }
     j['overall'] = {
         'total': overall.format({'days': days}),
         'daily_average': sum(daily).format({'days': days}, days)
