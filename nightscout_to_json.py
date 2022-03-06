@@ -470,7 +470,7 @@ class Stats(dict):
                 r[k] = round(avg, 1)
                 units = self.get('units', MGDL)
                 avg_mgdl = avg if units == MGDL else avg * MGDL_TO_MMOL
-                r['A1C'] = round((avg_mgdl + 46.7) / 28.7, 1)
+                r['a1c'] = round((avg_mgdl + 46.7) / 28.7, 1)
             elif k in ('range_low', 'range_high', ):
                 r[k] = round(100 * v/self.get('samples', 1), 1)
             elif k in ('samples', 'units', ):
@@ -585,6 +585,7 @@ def stats(new):
             for wd in days:
                 for h in hours:
                     daypart += stats_wd_hourly[(wd, h)]
+                daycount += 1
 
             if daycount > 0:
                 j['pattern'][desc].append(daypart.format({
