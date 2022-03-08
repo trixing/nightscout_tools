@@ -188,6 +188,9 @@ class Nightscout(object):
         # print(e['dateString'], dt)
         min_dt = min(min_dt or dt, dt)
         max_dt = max(max_dt or dt, dt)
+        if 'sgv' not in e:
+            log.append('glucose entry without glucose value: %s' % repr(e))
+            continue
         glucose['index'].append(ots)
         glucose['values'].append(e['sgv'])
         glucose['hours'].append(lt.hour + (lt.minute*60 + lt.second)/3600.0)
@@ -388,7 +391,7 @@ class Nightscout(object):
     for src, target in ((iage, new_iage), (cage, new_cage), (sage, new_sage)):
         for ts, _ in src:
             bucket = get_bucket(ts)
-            if bucket < len(nc) and bucket >= 0:
+            if bucket < len(target) and bucket >= 0:
                 target[bucket] = 1
         age = -1
         for i, v in enumerate(target):
